@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Parcel Map with Distance Tool</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <style>
+    #map { height: 800px; }
+    #controls { margin: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    #distanceInfo { margin: 5px; font-weight: bold; }
+    .legend {
+      background: white; padding: 8px 10px; border-radius: 5px; font-size: 14px;
+      line-height: 18px; color: #333; box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    }
+    .legend i { width: 14px; height: 14px; float: left; margin-right: 8px; opacity: 0.9; }
+    input[type="number"], input[type="text"] { padding: 4px 6px; }
+    button { padding: 6px 10px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label for="minAcres">Min Acres:</label>
+    <input type="number" id="minAcres" step="0.01" value="0">
+    <label for="maxAcres">Max Acres:</label>
+    <input type="number" id="maxAcres" step="0.01" value="100">
+    <label for="ownerName">Owner Name:</label>
+    <input type="text" id="ownerName" placeholder="Enter owner name">
+    <button id="applyFilterBtn">Apply Filter</button>
+    <button id="toggleMeasure">Toggle Measure Tool</button>
+  </div>
+
+  <div id="distanceInfo">Distance: 0 ft</div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+  <!-- Your GeoJSON datasets -->
+  <script src="davidson.js"></script>
+  <script src="cornelius.js"></script>
+  <script src="iredell.js"></script>
+
+  <script>
+    // --- Map setup ---
+    const map = L.map("map", { maxZoom: 22 }).setView([35.4993, -80.8487], 16);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 23 }).addTo(map);
+
+    let davidsonLayer, corneliusLayer, iredellLayer, layerControl;
+
+    // Measure state
+    let measureEnabled = false;
+    let measurePoints = [];
+    let measureMarkers = [];
+    let measureLine;
+    const distanceInfo = document.getElementById('distanceInfo');
+
+    // Toggle measure tool
+    document.getElementById('toggleMeasure').onclick = () => {
+      measureEnabled = !measureEnabled;
+      distanceInfo.innerHTML = "Distance: 0 ft";
+      if (measureLine) map.removeLayer(measureLine);
+      measureLine = null;
+      measurePoints.forEach(pt => map.removeLayer(pt));
+      measurePoints = [];
+      measureMarkers.forEach(m => map.removeLayer(m));
+      measureMarkers = [];
+    };
+
+    // Helpers for robust property access
+    function firstNonEmpty(props, keys) {
+      for (const k of keys) {
+        const v = props[k];
+        if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+      }
+      return null;
+    }
+    function toNumberOrNaN(val) {
+      const n = parseFloat(val);
+      return Number.isNaN(n) ? NaN : n;
+    }
+
+    // Popup builder
+    function createPopupContent(feature, mlsFields=[]) {
+      const props = feature.properties;
+      let html = `
+        <b>Parcel Number:</b> ${props.parno || props._parno || ""}<br>
+        <b>Owner:</b> ${props.ownname || props._ownname || props.owner || ""}<br>
+        <b>Mail Address:</b> ${props.mailadd || props._mailadd || ""}<br>
+        <b>Acres:</b> ${props.gisacres || props._gisacres || ""}<br>
+        <b>Structure:</b> ${props.struct || props._struct || ""}<br>
+        <b>Year Built:</b> ${props.structyear || props._structyea || ""}<br>
+        <b>Subdivision:</b> ${props.subdivisio || props._subdivisi || ""}<br>
+        <b>Sale Date:</b> ${props.saledate || props._saledate || ""}<br>
+      `;
+      mlsFields.forEach(f => {
+        const val = props[f];
+        if (val !== null && val !== undefined && String(val).trim() !== "") {
+          html += `<b>${f}:</b> ${val}<br>`;
+        }
+      });
+      return html;
+    }
+
+    function bindPopupWithCheck(layer, feature, mlsFields=[]) {
+      layer.on('click', function() {
+        if (!measureEnabled) {
+          layer.bindPopup(createPopupContent(feature, mlsFields)).openPopup();
+        }
+      });
+    }
+
+    // Factory to make one persistent GeoJSON layer we can reuse
+    function makeGeoJsonLayer(data, color, mlsFields=[]) {
+      return L.geoJSON(data, {
+        style: { color: color, weight: 1 },
+        onEachFeature: (feature, layer) => bindPopupWithCheck(layer, feature, mlsFields)
+      });
+    }
+
+    // Create layers ONCE and add to control
+    function renderAll() {
+      davidsonLayer = makeGeoJsonLayer(
+        davidson, "#ff3333",
+        ["mls_parcnu","mls_sewer","mls_ML#","mls_water","mls_acre","mls_LotDes","mls_add","mls_subdiv","mls_yrbuil"]
+      ).addTo(map);
+
+      corneliusLayer = makeGeoJsonLayer(
+        cornelius, "#3369ff",
+        ["mls_sewer","mls_LotDes","mls_acre","mls_subdiv","mls_yrbuil","mls_ML#","mls_water"]
+      ).addTo(map);
+
+      iredellLayer = makeGeoJsonLayer(
+        iredell, "#355E3B",
+        ["mls_ML#","mls_add","mls_subdiv","mls_yrbuilt","mls_acre","mls_parcnum","mls_sewer","mls_water","mls_LotDesc",
+         "mls_lots_ML#","mls_lots_add","mls_lots_city","mls_lots_parcnum","mls_lots_acre","mls_lots_subdiv","mls_lots_water","mls_lots_sewer","mls_lots_LotDesc"]
+      ).addTo(map);
+
+      layerControl = L.control.layers(null, {
+        "Davidson Parcels": davidsonLayer,
+        "Cornelius Parcels": corneliusLayer,
+        "Iredell Parcels": iredellLayer
+      }, { collapsed: false }).addTo(map);
+    }
+
+    // --- Filtering (REUSES layers; does not create new ones) ---
+
+    // Keys to check per dataset for acres & owner
+    const ACRE_KEYS = {
+      davidson: ["gisacres","_gisacres"],
+      cornelius: ["gisacres","_gisacres"],   // <-- fixes Cornelius by checking BOTH
+      iredell:   ["gisacres","_gisacres"]
+    };
+    const OWNER_KEYS = ["ownname","_ownname","owner","Owner","OWNER"]; // check broad variants
+
+    function buildFilteredFC(features, acreKeys, min, max, ownerFilterLower) {
+      return {
+        type: "FeatureCollection",
+        features: features.filter(f => {
+          const props = f.properties || {};
+          const acresVal = firstNonEmpty(props, acreKeys);
+          const acresNum = toNumberOrNaN(acresVal);
+          const acresOk = !Number.isNaN(acresNum) && acresNum >= min && acresNum <= max;
+
+          let ownerOk = true;
+          if (ownerFilterLower) {
+            ownerOk = OWNER_KEYS.some(k => {
+              const v = props[k];
+              return v && String(v).toLowerCase().includes(ownerFilterLower);
+            });
+          }
+          return acresOk && ownerOk;
+        })
+      };
+    }
+
+    function filterParcels() {
+      const min = parseFloat(document.getElementById("minAcres").value);
+      const max = parseFloat(document.getElementById("maxAcres").value);
+      const ownerRaw = document.getElementById("ownerName").value.trim();
+      const ownerFilterLower = ownerRaw ? ownerRaw.toLowerCase() : "";
+
+      // Build filtered FeatureCollections (NO NEW LAYERS)
+      const davFiltered = buildFilteredFC(davidson.features, ACRE_KEYS.davidson, min, max, ownerFilterLower);
+      const corFiltered = buildFilteredFC(cornelius.features, ACRE_KEYS.cornelius, min, max, ownerFilterLower);
+      const ireFiltered = buildFilteredFC(iredell.features,   ACRE_KEYS.iredell,   min, max, ownerFilterLower);
+
+      // Reuse existing layers: clear + addData
+      davidsonLayer.clearLayers();
+      davidsonLayer.addData(davFiltered);
+
+      corneliusLayer.clearLayers();
+      corneliusLayer.addData(corFiltered);
+
+      iredellLayer.clearLayers();
+      iredellLayer.addData(ireFiltered);
+    }
+
+    // Hook up UI
+    document.getElementById("applyFilterBtn").addEventListener("click", filterParcels);
+    document.getElementById("ownerName").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") filterParcels();
+    });
+
+    // --- Measure tool (adds point popups; parcel popups suppressed while measuring) ---
+    map.on('click', function(e) {
+      if (!measureEnabled) return;
+
+      const marker = L.circleMarker(e.latlng, {
+        radius: 5, color: 'orange', fillColor: 'orange', fillOpacity: 0.8
+      }).addTo(map);
+
+      measureMarkers.push(marker);
+      measurePoints.push(e.latlng);
+
+      if (measureLine) map.removeLayer(measureLine);
+      measureLine = L.polyline(measurePoints, { color: 'orange' }).addTo(map);
+
+      let totalMeters = 0;
+      for (let i = 1; i < measurePoints.length; i++) {
+        totalMeters += measurePoints[i-1].distanceTo(measurePoints[i]);
+      }
+      const totalFeet = totalMeters * 3.28084;
+      distanceInfo.innerHTML = "Distance: " + totalFeet.toFixed(2) + " ft";
+
+      marker.bindPopup(
+        `Point ${measurePoints.length}<br>
+         Lat: ${e.latlng.lat.toFixed(6)}, Lng: ${e.latlng.lng.toFixed(6)}`
+      ).openPopup();
+    });
+
+    // Init
+    renderAll();
+  </script>
+</body>
+</html>
