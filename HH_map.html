@@ -49,23 +49,16 @@
   <script src="cabarrus.js"></script>
 
   <script>
-    // --- Map setup ---
     const map = L.map("map", {
       center: [35.4993, -80.8487],
       zoom: 12,
       maxZoom: 22,
-      // zoomAnimation: true,
-      // markerZoomAnimation: true,
-      // zoomSnap: 0,           // smooth fractional zoom
-      // zoomDelta: 0.5,        // half-step zoom with buttons
-      // wheelPxPerZoomLevel: 60 // faster trackpad zoom
     });
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 23 }).addTo(map);
 
     let davidsonLayer, corneliusLayer, iredellLayer, rowanLayer, cabarrusLayer, layerControl;
 
-    // Measure state
     let measureEnabled = false;
     let measurePoints = [];
     let measureMarkers = [];
@@ -86,7 +79,6 @@
       measureMarkers = [];
     };
 
-    // Helpers
     function firstNonEmpty(props, keys) {
       for (const k of keys) {
         const v = props[k];
@@ -94,15 +86,18 @@
       }
       return null;
     }
+
     function toNumberOrNaN(val) {
       const n = parseFloat(val);
       return Number.isNaN(n) ? NaN : n;
     }
 
-    function createPopupContent(feature, mlsFields=[]) {
+    function createPopupContent(feature, mlsFields = [], county = "") {
       const props = feature.properties;
+      const parno = props.parno || props._parno || "";
+
       let html = `
-        <b>Parcel Number:</b> ${props.parno || props._parno || ""}<br>
+        <b>Parcel Number:</b> ${parno}<br>
         <b>Owner:</b> ${props.ownname || props._ownname || props.owner || ""}<br>
         <b>Mail Address:</b> ${props.mailadd || props._mailadd || ""}<br>
         <b>Acres:</b> ${props.gisacres || props._gisacres || ""}<br>
@@ -111,37 +106,44 @@
         <b>Subdivision:</b> ${props.subdivisio || props._subdivisi || ""}<br>
         <b>Sale Date:</b> ${props.saledate || props._saledate || ""}<br>
       `;
+
+      if (["davidson", "cornelius"].includes(county.toLowerCase()) && parno) {
+        const url = `https://polaris3g.mecklenburgcountync.gov/pid/${encodeURIComponent(parno)}`;
+        html += `<b>Polaris Link:</b> <a href="${url}" target="_blank" rel="noopener">View Property</a><br>`;
+      }
+
       mlsFields.forEach(f => {
         const val = props[f];
         if (val !== null && val !== undefined && String(val).trim() !== "") {
           html += `<b>${f}:</b> ${val}<br>`;
         }
       });
+
       return html;
     }
 
-    function bindPopupWithCheck(layer, feature, mlsFields=[]) {
-      layer.on('click', function() {
+    function bindPopupWithCheck(layer, feature, mlsFields = [], county = "") {
+      layer.on('click', function () {
         if (!measureEnabled) {
-          layer.bindPopup(createPopupContent(feature, mlsFields)).openPopup();
+          layer.bindPopup(createPopupContent(feature, mlsFields, county)).openPopup();
         }
       });
     }
 
-    function makeGeoJsonLayer(data, color, mlsFields=[]) {
+    function makeGeoJsonLayer(data, color, mlsFields = [], county = "") {
       return L.geoJSON(data, {
         style: { color: color, weight: 1 },
-        onEachFeature: (feature, layer) => bindPopupWithCheck(layer, feature, mlsFields)
+        onEachFeature: (feature, layer) => bindPopupWithCheck(layer, feature, mlsFields, county)
       });
     }
 
     function renderAll() {
-      davidsonLayer = makeGeoJsonLayer(davidson, "#fa0202", ["mls_parcnu","mls_sewer","mls_ML#","mls_water","mls_acre","mls_LotDes","mls_add","mls_subdiv","mls_yrbuil"]).addTo(map);
-      corneliusLayer = makeGeoJsonLayer(cornelius, "#3369ff", ["mls_sewer","mls_LotDes","mls_acre","mls_subdiv","mls_yrbuil","mls_ML#","mls_water"]).addTo(map);
-      iredellLayer = makeGeoJsonLayer(iredell, "#355E3B", ["mls_ML#","mls_add","mls_subdiv","mls_yrbuilt","mls_acre","mls_parcnum","mls_sewer","mls_water","mls_LotDesc","mls_lots_ML#","mls_lots_add","mls_lots_city","mls_lots_parcnum","mls_lots_acre","mls_lots_subdiv","mls_lots_water","mls_lots_sewer","mls_lots_LotDesc"]).addTo(map);
-      rowanLayer = makeGeoJsonLayer(rowan, "#8B00FF", ["mls_parcnum","mls_acre","mls_subdiv","mls_yrbuilt","mls_sewer","mls_water","mls_LotDesc"]).addTo(map);
-      cabarrusLayer = makeGeoJsonLayer(cabarrus, "#ff9900", ["mls_parcnum","mls_acre","mls_subdiv","mls_yrbuilt","mls_sewer","mls_water","mls_LotDesc"]).addTo(map);
-
+      davidsonLayer = makeGeoJsonLayer(davidson, "#fa0202", ["mls_parcnu","mls_sewer","mls_ML#","mls_water","mls_acre","mls_LotDes","mls_add","mls_subdiv","mls_yrbuil"], "davidson").addTo(map);
+      corneliusLayer = makeGeoJsonLayer(cornelius, "#3369ff", ["mls_sewer","mls_LotDes","mls_acre","mls_subdiv","mls_yrbuil","mls_ML#","mls_water"], "cornelius").addTo(map);
+      iredellLayer = makeGeoJsonLayer(iredell, "#355E3B", ["mls_ML#","mls_add","mls_subdiv","mls_yrbuilt","mls_acre","mls_parcnum","mls_sewer","mls_water","mls_LotDesc","mls_lots_ML#","mls_lots_add","mls_lots_city","mls_lots_parcnum","mls_lots_acre","mls_lots_subdiv","mls_lots_water","mls_lots_sewer","mls_lots_LotDesc"], "iredell").addTo(map);
+      rowanLayer = makeGeoJsonLayer(rowan, "#8B00FF", ["mls_parcnum","mls_acre","mls_subdiv","mls_yrbuilt","mls_sewer","mls_water","mls_LotDesc"], "rowan").addTo(map);
+      cabarrusLayer = makeGeoJsonLayer(cabarrus, "#ff9900", ["mls_parcnum","mls_acre","mls_subdiv","mls_yrbuilt","mls_sewer","mls_water","mls_LotDesc"], "cabarrus").add
+      
       layerControl = L.control.layers(null, {
         "Davidson Parcels": davidsonLayer,
         "Cornelius Parcels": corneliusLayer,
@@ -152,14 +154,14 @@
     }
 
     const ACRE_KEYS = {
-      davidson: ["gisacres","_gisacres"],
-      cornelius: ["gisacres","_gisacres"],
-      iredell: ["gisacres","_gisacres"],
-      rowan: ["gisacres","_gisacres"],
-      cabarrus: ["gisacres","_gisacres"]
+      davidson: ["gisacres", "_gisacres"],
+      cornelius: ["gisacres", "_gisacres"],
+      iredell: ["gisacres", "_gisacres"],
+      rowan: ["gisacres", "_gisacres"],
+      cabarrus: ["gisacres", "_gisacres"]
     };
-    const OWNER_KEYS = ["ownname","_ownname","owner","Owner","OWNER"];
-    const YEAR_KEYS = ["yearbuilt","mls_yrbuilt","YEAR_BUILT","structyear","_structyea"];
+    const OWNER_KEYS = ["ownname", "_ownname", "owner", "Owner", "OWNER"];
+    const YEAR_KEYS = ["yearbuilt", "mls_yrbuilt", "YEAR_BUILT", "structyear", "_structyea"];
 
     function buildFilteredFC(features, acreKeys, min, max, ownerFilterLower, minYear, maxYear) {
       return {
@@ -199,11 +201,16 @@
       const minYear = parseInt(document.getElementById("minYear").value) || -Infinity;
       const maxYear = parseInt(document.getElementById("maxYear").value) || Infinity;
 
-      davidsonLayer.clearLayers(); davidsonLayer.addData(buildFilteredFC(davidson.features, ACRE_KEYS.davidson, min, max, ownerFilterLower, minYear, maxYear));
-      corneliusLayer.clearLayers(); corneliusLayer.addData(buildFilteredFC(cornelius.features, ACRE_KEYS.cornelius, min, max, ownerFilterLower, minYear, maxYear));
-      iredellLayer.clearLayers(); iredellLayer.addData(buildFilteredFC(iredell.features, ACRE_KEYS.iredell, min, max, ownerFilterLower, minYear, maxYear));
-      rowanLayer.clearLayers(); rowanLayer.addData(buildFilteredFC(rowan.features, ACRE_KEYS.rowan, min, max, ownerFilterLower, minYear, maxYear));
-      cabarrusLayer.clearLayers(); cabarrusLayer.addData(buildFilteredFC(cabarrus.features, ACRE_KEYS.cabarrus, min, max, ownerFilterLower, minYear, maxYear));
+      davidsonLayer.clearLayers();
+      davidsonLayer.addData(buildFilteredFC(davidson.features, ACRE_KEYS.davidson, min, max, ownerFilterLower, minYear, maxYear));
+      corneliusLayer.clearLayers();
+      corneliusLayer.addData(buildFilteredFC(cornelius.features, ACRE_KEYS.cornelius, min, max, ownerFilterLower, minYear, maxYear));
+      iredellLayer.clearLayers();
+      iredellLayer.addData(buildFilteredFC(iredell.features, ACRE_KEYS.iredell, min, max, ownerFilterLower, minYear, maxYear));
+      rowanLayer.clearLayers();
+      rowanLayer.addData(buildFilteredFC(rowan.features, ACRE_KEYS.rowan, min, max, ownerFilterLower, minYear, maxYear));
+      cabarrusLayer.clearLayers();
+      cabarrusLayer.addData(buildFilteredFC(cabarrus.features, ACRE_KEYS.cabarrus, min, max, ownerFilterLower, minYear, maxYear));
     }
 
     document.getElementById("applyFilterBtn").addEventListener("click", filterParcels);
@@ -211,7 +218,7 @@
       if (e.key === "Enter") filterParcels();
     });
 
-    map.on('click', function(e) {
+    map.on('click', function (e) {
       if (!measureEnabled) return;
 
       const marker = L.circleMarker(e.latlng, { radius: 5, color: 'orange', fillColor: 'orange', fillOpacity: 0.8 }).addTo(map);
@@ -223,7 +230,7 @@
 
       let totalMeters = 0;
       for (let i = 1; i < measurePoints.length; i++) {
-        totalMeters += measurePoints[i-1].distanceTo(measurePoints[i]);
+        totalMeters += measurePoints[i - 1].distanceTo(measurePoints[i]);
       }
       const totalFeet = totalMeters * 3.28084;
       distanceInfo.innerHTML = "Distance: " + totalFeet.toFixed(2) + " ft";
@@ -244,23 +251,27 @@
 
       marker.bindPopup(`Point ${measurePoints.length}<br>Lat: ${e.latlng.lat.toFixed(6)}, Lng: ${e.latlng.lng.toFixed(6)}`).openPopup();
     });
+
     document.getElementById("resetFilterBtn").addEventListener("click", () => {
-      // Clear inputs
       document.getElementById("minAcres").value = 0;
       document.getElementById("maxAcres").value = 100;
       document.getElementById("ownerName").value = "";
       document.getElementById("minYear").value = "";
       document.getElementById("maxYear").value = "";
 
-      // Reset all layers to show all features
-      davidsonLayer.clearLayers(); davidsonLayer.addData(davidson.features);
-      corneliusLayer.clearLayers(); corneliusLayer.addData(cornelius.features);
-      iredellLayer.clearLayers(); iredellLayer.addData(iredell.features);
-      rowanLayer.clearLayers(); rowanLayer.addData(rowan.features);
-      cabarrusLayer.clearLayers(); cabarrusLayer.addData(cabarrus.features);
+      davidsonLayer.clearLayers();
+      davidsonLayer.addData(davidson.features);
+      corneliusLayer.clearLayers();
+      corneliusLayer.addData(cornelius.features);
+      iredellLayer.clearLayers();
+      iredellLayer.addData(iredell.features);
+      rowanLayer.clearLayers();
+      rowanLayer.addData(rowan.features);
+      cabarrusLayer.clearLayers();
+      cabarrusLayer.addData(cabarrus.features);
     });
 
-    // Init
+    // Initialize map
     renderAll();
   </script>
 </body>
