@@ -49,13 +49,38 @@
   <script src="cabarrus.js"></script>
 
   <script>
-    const map = L.map("map", {
-      center: [35.4993, -80.8487],
-      zoom: 12,
-      maxZoom: 22,
+    // Base layers
+    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { 
+      maxZoom: 19 // provider actually only serves tiles to 16
     });
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 23 }).addTo(map);
+    // More-detailed topo: USGS Topo (provides richer topo contours / hillshading)
+    // Note: publicly available from the USGS National Map tile service
+    // const topo = L.tileLayer(
+    //   "https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}",
+    //   { maxZoom: 20, 
+    //       // provider actually only serves tiles to 16
+    //     attribution: "USGS" }
+    // );
+    const topo = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+      { attribution: 'Tiles © Esri', maxZoom: 19 }
+    );
+
+
+    const satellite = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19 }
+    );
+
+    // Initialize map (restored to original, simpler behavior)
+    const map = L.map("map", {
+      maxZoom: 19
+      
+    }).setView([35.4993, -80.8487], 12);
+
+    // Add default base layer
+    osm.addTo(map);
 
     let davidsonLayer, corneliusLayer, iredellLayer, rowanLayer, cabarrusLayer, layerControl;
 
@@ -140,17 +165,26 @@
     function renderAll() {
       davidsonLayer = makeGeoJsonLayer(davidson, "#fa0202", ["mls_parcnu","mls_sewer","mls_ML#","mls_water","mls_acre","mls_LotDes","mls_add","mls_subdiv","mls_yrbuil"], "davidson").addTo(map);
       corneliusLayer = makeGeoJsonLayer(cornelius, "#3369ff", ["mls_sewer","mls_LotDes","mls_acre","mls_subdiv","mls_yrbuil","mls_ML#","mls_water"], "cornelius").addTo(map);
-      iredellLayer = makeGeoJsonLayer(iredell, "#355E3B", ["mls_ML#","mls_add","mls_subdiv","mls_yrbuilt","mls_acre","mls_parcnum","mls_sewer","mls_water","mls_LotDesc","mls_lots_ML#","mls_lots_add","mls_lots_city","mls_lots_parcnum","mls_lots_acre","mls_lots_subdiv","mls_lots_water","mls_lots_sewer","mls_lots_LotDesc"], "iredell").addTo(map);
+      iredellLayer = makeGeoJsonLayer(iredell, "#811331", ["mls_ML#","mls_add","mls_subdiv","mls_yrbuilt","mls_acre","mls_parcnum","mls_sewer","mls_water","mls_LotDesc","mls_lots_ML#","mls_lots_add","mls_lots_city","mls_lots_parcnum","mls_lots_acre","mls_lots_subdiv","mls_lots_water","mls_lots_sewer","mls_lots_LotDesc"], "iredell").addTo(map);
       rowanLayer = makeGeoJsonLayer(rowan, "#8B00FF", ["mls_parcnum","mls_acre","mls_subdiv","mls_yrbuilt","mls_sewer","mls_water","mls_LotDesc"], "rowan").addTo(map);
-      cabarrusLayer = makeGeoJsonLayer(cabarrus, "#ff9900", ["mls_parcnum","mls_acre","mls_subdiv","mls_yrbuilt","mls_sewer","mls_water","mls_LotDesc"], "cabarrus").add
-      
-      layerControl = L.control.layers(null, {
-        "Davidson Parcels": davidsonLayer,
-        "Cornelius Parcels": corneliusLayer,
-        "Iredell Parcels": iredellLayer,
-        "Rowan Parcels": rowanLayer,
-        "Cabarrus Parcels": cabarrusLayer
-      }, { collapsed: false }).addTo(map);
+      cabarrusLayer = makeGeoJsonLayer(cabarrus, "#ff9900", ["mls_parcnum","mls_acre","mls_subdiv","mls_yrbuilt","mls_sewer","mls_water","mls_LotDesc"], "cabarrus").addTo(map);
+
+      // Add base + overlay control
+      layerControl = L.control.layers(
+        {
+          "OpenStreetMap": osm,
+          "Topographic (USGS)": topo,
+          "Satellite": satellite
+        },
+        {
+          "Davidson Parcels": davidsonLayer,
+          "Cornelius Parcels": corneliusLayer,
+          "Iredell Parcels": iredellLayer,
+          "Rowan Parcels": rowanLayer,
+          "Cabarrus Parcels": cabarrusLayer
+        },
+        { collapsed: false }
+      ).addTo(map);
     }
 
     const ACRE_KEYS = {
